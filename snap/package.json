@@ -1,6 +1,6 @@
 {
-  "name": "@wardenprotocol/snap",
-  "version": "0.1.2",
+  "name": "wardenprotocol-snap",
+  "version": "0.1.0",
   "description": "Warden Protocol MetaMask snap",
   "repository": {
     "type": "git",
@@ -10,7 +10,6 @@
   "main": "./dist/bundle.js",
   "files": [
     "dist/",
-    "images/",
     "snap.manifest.json"
   ],
   "scripts": {

@@ -21,28 +21,19 @@ type SignRequestHandler func(w SignResponseWriter, req *SignRequest)
 
 type signResponseWriter struct {
 	ctx           context.Context
-	txWriter      *TxWriter
+	tx            *client.TxClient
 	signRequestID uint64
 	logger        *slog.Logger
-	onComplete    func()
 }
 
 func (w *signResponseWriter) Fulfil(signature []byte) error {
 	w.logger.Debug("fulfilling sign request", "id", w.signRequestID, "signature", hex.EncodeToString(signature))
-	defer w.onComplete()
-	return w.txWriter.Write(w.ctx, client.SignRequestFulfilment{
-		RequestID: w.signRequestID,
-		Signature: signature,
-	})
+	return w.tx.FulfilSignatureRequest(w.ctx, w.signRequestID, signature)
 }
 
 func (w *signResponseWriter) Reject(reason string) error {
 	w.logger.Debug("rejecting sign request", "id", w.signRequestID, "reason", reason)
-	defer w.onComplete()
-	return w.txWriter.Write(w.ctx, client.SignRequestRejection{
-		RequestID: w.signRequestID,
-		Reason:    reason,
-	})
+	return w.tx.RejectSignatureRequest(w.ctx, w.signRequestID, reason)
 }
 
 func (a *App) ingestSignRequests(signRequestsCh chan *wardentypes.SignRequest) {
@@ -54,13 +45,7 @@ func (a *App) ingestSignRequests(signRequestsCh chan *wardentypes.SignRequest) {
 			a.logger().Error("failed to get sign requests", "error", err)
 		} else {
 			for _, signRequest := range signRequests {
-				if !a.signRequestTracker.IsNew(signRequest.Id) {
-					a.logger().Debug("skipping sign request", "id", signRequest.Id)
-					continue
-				}
-
 				a.logger().Info("got sign request", "id", signRequest.Id)
-				a.signRequestTracker.Ingested(signRequest.Id)
 				signRequestsCh <- signRequest
 			}
 		}
@@ -80,18 +65,14 @@ func (a *App) handleSignRequest(signRequest *wardentypes.SignRequest) {
 		ctx := context.Background()
 		w := &signResponseWriter{
 			ctx:           ctx,
-			txWriter:      a.txWriter,
+			tx:            a.tx,
 			signRequestID: signRequest.Id,
 			logger:        a.logger(),
-			onComplete: func() {
-				a.keyRequestTracker.Done(signRequest.Id)
-			},
 		}
 		defer func() {
 			if r := recover(); r != nil {
 				a.logger().Error("panic in sign request handler", "error", r)
 				_ = w.Reject("internal error")
-				return
 			}
 		}()
 
